@@ -796,7 +796,7 @@ function drawPeople() {
   }
   for (const [id, e] of pointEls) if (!seen.has(id)) { e.remove(); pointEls.delete(id); }
 
-  const showPreview = state.view === "quiz" ||
+  const showPreview =
     (state.view === "result" && state.saveResult && !state.saveResult.ok && !state.saveResult.pending);
   if (showPreview) {
     if (!previewEl) { previewEl = makePoint("me", "var(--ink)", "toi", null); previewEl.style.transform = `translate(${G.cx}px, ${G.cy}px)`; previewEl.style.zIndex = 4; }
