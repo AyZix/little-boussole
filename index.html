@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Little Boussole</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: split screen. Left column = brand + control panel (quiz, roster, cards); right = the 2D compass plane. Phones stack brand → plane → panel. Each pole of the compass is a friend with their own colour. */
+:root{
+  --bg:#e9edf4; --panel:#fbfcfe; --ink:#141a2c; --muted:#5a6479; --line:#d3d9e5; --track:#e2e7f0;
+  --stage:#dfe5ef; --grid:#c3cbdb; --axis:#8f99ae;
+  --emile:#d9443a; --capo:#2d68d8; --yohan:#1f8f55; --oli:#c07a0c; --danger:#c2362c;
+  --display:"Unbounded", "Arial Black", system-ui, sans-serif;
+  --body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d111c; --panel:#141a29; --ink:#e7ebf4; --muted:#949db2; --line:#272f44; --track:#222a3d;
+    --stage:#101625; --grid:#232b40; --axis:#4a5570;
+    --emile:#ff6b5f; --capo:#6a9bff; --yohan:#4ccb84; --oli:#f2b33d; --danger:#ff7468; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d111c; --panel:#141a29; --ink:#e7ebf4; --muted:#949db2; --line:#272f44; --track:#222a3d;
+  --stage:#101625; --grid:#232b40; --axis:#4a5570;
+  --emile:#ff6b5f; --capo:#6a9bff; --yohan:#4ccb84; --oli:#f2b33d; --danger:#ff7468; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--body)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--capo);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:minmax(320px,410px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
+  grid-template-areas:"brand stage" "panel stage";gap:16px;padding:16px;height:100%}
+.brand{grid-area:brand;display:flex;align-items:center;gap:12px;padding-inline:4px}
+.brand svg{flex:none}
+.brand h1{font:700 19px/1.15 var(--display);letter-spacing:-.01em;margin:0;text-wrap:balance}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.panel{grid-area:panel;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px 20px;overflow-y:auto;min-width:0}
+.view{display:flex;flex-direction:column;gap:22px}
+.stage{grid-area:stage;position:relative;border-radius:18px;overflow:hidden;background:var(--stage);border:1px solid var(--line);min-width:0;min-height:0}
+#plane{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+h2{font:600 12px/1 var(--body);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;display:flex;justify-content:space-between}
+.lede{margin:0;max-width:60ch}
+.axes{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.axes li{display:grid;grid-template-columns:86px 1fr;gap:10px;align-items:baseline}
+.axes .k{font:500 11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.axes .v{font-weight:600}
+.pn{color:var(--c);font-weight:700}
+
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-weight:600;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row > input{flex:1 1 160px;min-width:0}
+input[type=text]{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+input[type=text]:focus{border-color:var(--ink);outline:none}
+.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer;background:var(--ink);color:var(--panel)}
+.btn:hover{opacity:.88}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--ink);opacity:1}
+.btn:disabled{opacity:.35;cursor:default}
+.link{background:none;border:0;padding:0;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.status{font-size:13px;color:var(--muted);border-left:3px solid var(--line);padding:2px 0 2px 10px;margin:0}
+.err{color:var(--danger);font-size:13px;margin:0}
+
+.roster{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.roster li{display:flex;align-items:center;gap:4px}
+.who{flex:1;min-width:0;display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px;align-items:center;background:none;border:1px solid transparent;border-radius:10px;padding:8px 10px;text-align:left;cursor:pointer}
+.who:hover{background:var(--track)}
+.who[aria-pressed="true"]{border-color:var(--line);background:var(--bg)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--c)}
+.nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arch{font-size:12px;color:var(--muted);white-space:nowrap}
+.del{background:none;border:0;color:var(--muted);cursor:pointer;padding:6px 8px;border-radius:8px;font-size:12px}
+.del:hover{color:var(--danger)}
+.del.confirm{color:var(--danger);font-weight:700}
+.empty{color:var(--muted);font-size:14px;margin:0}
+
+.card{border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)}
+.card-head{display:flex;flex-direction:column;gap:4px}
+.card .eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.card h3{font:700 20px/1.2 var(--display);margin:0;text-wrap:balance}
+.card p{margin:0;max-width:60ch}
+.archetype{font:700 28px/1.1 var(--display);margin:0;text-wrap:balance}
+.sim-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0}
+.bars{display:flex;flex-direction:column;gap:8px}
+.sim{display:grid;grid-template-columns:64px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:13px}
+.sim .who-n{font-weight:600;color:var(--c)}
+.sim .bar{height:8px;border-radius:4px;background:var(--track);overflow:hidden}
+.sim .bar div{height:100%;background:var(--c);border-radius:4px}
+.sim .pc{font:500 12px var(--mono);text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.sim.top .pc{color:var(--ink)}
+.pairs{display:grid;gap:6px;font-size:14px}
+.pairs div{display:flex;justify-content:space-between;gap:10px}
+.pairs span:first-child{color:var(--muted)}
+.pairs b{font-weight:600}
+.pairs .pct{font:500 12px var(--mono);color:var(--muted)}
+
+/* quiz */
+.quiz-top{display:flex;justify-content:space-between;align-items:center;font:500 13px var(--mono);color:var(--muted)}
+.progress{height:4px;background:var(--track);border-radius:2px;overflow:hidden}
+.progress div{height:100%;background:var(--ink);transition:width .25s}
+.q-text{font:500 21px/1.35 var(--body);margin:0;min-height:3.9em;text-wrap:balance}
+.likert{display:flex;flex-direction:column;gap:8px}
+.choice{display:flex;align-items:center;gap:12px;padding:12px 14px;line-height:1.35;border:1px solid var(--line);border-radius:12px;background:transparent;text-align:left;cursor:pointer}
+.choice:hover{border-color:var(--ink)}
+.choice[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.letter{flex:none;width:26px;height:26px;border-radius:8px;border:1.5px solid currentColor;display:grid;place-items:center;font:500 12px var(--mono);opacity:.75}
+.choice[aria-pressed="true"] .letter{opacity:1}
+.quiz-nav{display:flex;justify-content:space-between;align-items:center}
+
+.codebox{display:flex;flex-direction:column;gap:8px}
+.codebox input{font:500 12px var(--mono)}
+details summary{cursor:pointer;font-weight:600;font-size:14px}
+details[open] summary{margin-bottom:10px}
+
+/* plane overlays */
+.labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lbl{position:absolute;left:0;top:0}
+.pt{position:absolute;left:0;top:0;transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+.pt .ball{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--c);border:2px solid var(--stage);box-shadow:0 1px 3px rgb(0 0 0 / .25)}
+.pt.sel .ball{width:20px;height:20px;margin:-10px 0 0 -10px;box-shadow:0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent)}
+.tag{position:absolute;left:0;top:0;display:inline-flex;align-items:center;gap:6px;transform:translate(-50%,calc(-100% - 12px));pointer-events:auto;cursor:pointer;
+  background:var(--panel);color:var(--ink);border:1.5px solid var(--c);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgb(0 0 0 / .12)}
+.pt.sel .tag{background:var(--c);color:#fff;z-index:2}
+.pt.me .ball{background:transparent;border:2.5px dashed var(--ink)}
+.pt.me .tag{border-style:dashed;border-color:var(--ink)}
+.pole{position:absolute;left:0;top:0;font:700 13px var(--display);letter-spacing:.01em;color:var(--c);white-space:nowrap;background:var(--stage);padding:2px 6px;border-radius:6px}
+.stage-hint{position:absolute;left:14px;bottom:12px;font-size:12px;color:var(--muted);pointer-events:none}
+.stage-empty{position:absolute;left:50%;top:18px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;color:var(--muted);white-space:nowrap;max-width:calc(100% - 32px);overflow:hidden;text-overflow:ellipsis}
+
+@media (max-width:820px){
+  html,body{height:auto}
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"brand" "stage" "panel";height:auto}
+  .stage{height:min(100vw - 32px, 520px);min-height:300px}
+  .panel{overflow:visible}
+  .q-text{font-size:19px}
+  .stage-hint{display:none}
+}
+@media (prefers-reduced-motion: reduce){.progress div,.pt{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="brand">
+    <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+      <line x1="20" y1="20" x2="4" y2="20" stroke="var(--emile)" stroke-width="3" stroke-linecap="round"/>
+      <line x1="20" y1="20" x2="36" y2="20" stroke="var(--capo)" stroke-width="3" stroke-linecap="round"/>
+      <line x1="20" y1="20" x2="20" y2="36" stroke="var(--yohan)" stroke-width="3" stroke-linecap="round"/>
+      <line x1="20" y1="20" x2="20" y2="4" stroke="var(--oli)" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>Little Boussole</h1>
+      <p>À qui tu ressembles le plus dans la bande</p>
+    </div>
+  </header>
+
+  <aside class="panel">
+    <!-- HOME -->
+    <section class="view" id="view-home">
+      <p class="lede">Chacun passe le test, et la boussole place tout le monde sur le même plan. Plus tu es proche d’un nom, plus tu lui ressembles.</p>
+      <ul class="axes">
+        <li><span class="k">Horizontal</span><span class="v"><span class="pn" style="--c:var(--emile)">Emile</span> ↔ <span class="pn" style="--c:var(--capo)">Capo</span></span></li>
+        <li><span class="k">Vertical</span><span class="v"><span class="pn" style="--c:var(--yohan)">Yohan</span> ↔ <span class="pn" style="--c:var(--oli)">Oli</span></span></li>
+      </ul>
+      <form id="start-form" class="field" novalidate>
+        <label for="name">Ton prénom ou surnom</label>
+        <div class="row">
+          <input type="text" id="name" maxlength="24" autocomplete="off" placeholder="ex. Max">
+          <button class="btn" type="submit">Passer le test</button>
+        </div>
+        <p class="err" id="name-err" hidden></p>
+      </form>
+      <p class="status" id="status">Connexion au groupe…</p>
+      <div>
+        <h2><span>Le groupe</span><span id="count"></span></h2>
+        <ul class="roster" id="roster"></ul>
+        <p class="empty" id="roster-empty">Personne pour l’instant. Passe le test en premier, puis envoie le lien à tes amis.</p>
+      </div>
+      <div id="detail"></div>
+    </section>
+
+    <!-- QUIZ -->
+    <section class="view" id="view-quiz" hidden>
+      <div class="quiz-top"><span id="q-count"></span><button class="link" type="button" id="q-quit">Abandonner</button></div>
+      <div class="progress"><div id="q-bar" style="width:0%"></div></div>
+      <p class="q-text" id="q-text"></p>
+      <div class="likert" id="likert"></div>
+      <div class="quiz-nav">
+        <button class="btn ghost" type="button" id="q-back">← Précédente</button>
+        <span class="status" style="border:0;padding:0">Touches A, B, C…</span>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section class="view" id="view-result" hidden>
+      <div class="card-head">
+        <span class="status" style="border:0;padding:0" id="r-who"></span>
+        <p class="archetype" id="r-arch"></p>
+      </div>
+      <p class="lede" id="r-desc"></p>
+      <div class="bars" id="r-bars"></div>
+      <div class="pairs" id="r-pairs"></div>
+      <div id="r-save"></div>
+      <div class="row">
+        <button class="btn" type="button" id="r-home">Voir le groupe</button>
+        <button class="btn ghost" type="button" id="r-again">Refaire le test</button>
+      </div>
+    </section>
+  </aside>
+
+  <main class="stage" id="stage">
+    <svg id="plane" aria-label="Plan des résultats du groupe"></svg>
+    <div class="labels" id="labels"></div>
+    <div class="stage-empty" id="stage-empty" hidden></div>
+    <div class="stage-hint">Clique sur un nom pour voir sa fiche</div>
+  </main>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- content ---------- */
+// Les pôles : x− Emile · x+ Capo · y− Yohan · y+ Oli
+const POLES = [
+  { key: "emile", name: "Emile", x: -100, y: 0 },
+  { key: "capo",  name: "Capo",  x: 100,  y: 0 },
+  { key: "yohan", name: "Yohan", x: 0,    y: -100 },
+  { key: "oli",   name: "Oli",   x: 0,    y: 100 },
+];
+// Chaque question : { t: "texte", r: [ { t: "réponse", p: { capo: 1, oli: 0.5 } }, … ] }  (2 à 6 réponses)
+// p = vers qui pousse la réponse (poids 0 à 1). Une réponse sans p tire vers le milieu.
+const QUESTIONS = [
+  { t: "Tu es ADC, ton support part roam pendant toute la laning phase après 4 minutes. Tu…", r: [
+    { t: "Rages sur ton support dans le chat", p: { capo: 1, yohan: -1 } },
+    { t: "Dis rien et farm sous tour", p: { yohan: 0.5, emile: -0.5 } },
+    { t: "Essaies de 1v2 et meurs comme un cave", p: { oli: 1 } },
+    { t: "Harcèles ton jungler pour un gank", p: { oli: 0.5, emile: 1, yohan: -1 } },
+  ] },
+  { t: "Ton jungler te fait un bon gank top, te laisse le kill, et en partant il smite ton canon. Tu…", r: [
+    { t: "Appuies sur U pour un fist bump", p: { yohan: 1 } },
+    { t: "Spam ping ???", p: { oli: 1 } },
+    { t: "Rages dans le chat", p: { capo: 1 } },
+  ] },
+  { t: "En soirée avec tes amis, tu préfères jouer…", r: [
+    { t: "Aux dés (pour boire)", p: { yohan: 1 } },
+    { t: "À un jeu de société", p: { emile: 1 } },
+    { t: "Au beer pong", p: { capo: 0.5 } },
+    { t: "À stack the cup", p: { oli: 1 } },
+  ] },
+  { t: "Tu préfères…", r: [
+    { t: "Recevoir 10 000 $ pour toi", p: { capo: 1 } },
+    { t: "Que tes 10 meilleurs amis reçoivent 3 000 $ chacun (et rien pour toi)", p: { yohan: 1, emile: 1, oli: 0.5 } },
+  ] },
+  { t: "Tu préfères…", r: [
+    { t: "Recevoir 100 millions $, mais mourir dans 15 ans", p: { yohan: 0.5, capo: 0.5 } },
+    { t: "Avoir 100 millions $ de dette, mais mourir de cause naturelle", p: { emile: 1 } },
+  ] },
+  { t: "Le gouvernement augmente les impôts des riches pour financer la santé. Tu dis…", r: [
+    { t: "Enfin !", p: { emile: 1 } },
+    { t: "C’est du vol légalisé", p: { capo: 1 } },
+    { t: "Ça dépend des chiffres", p: { oli: 1 } },
+    { t: "Je m’en fous tant que la soirée de vendredi tient", p: { yohan: 1 } },
+  ] },
+  { t: "Un pote arrive avec 2 h de retard à la soirée. Tu…", r: [
+    { t: "Lui as gardé une bière", p: { yohan: 1 } },
+    { t: "Lui fais payer la prochaine tournée", p: { capo: 1 } },
+    { t: "T’en fiches, il est là", p: { oli: 1 } },
+    { t: "Lui demandes si tout va bien", p: { emile: 1 } },
+  ] },
+  { t: "Aux prochaines élections, tu votes…", r: [
+    { t: "À gauche ou écolo", p: { emile: 1 } },
+    { t: "À droite", p: { capo: 1 } },
+    { t: "Au centre", p: { oli: 1 } },
+    { t: "T’as oublié d’aller voter", p: { yohan: 1 } },
+  ] },
+  { t: "Soirée Netflix, tu choisis…", r: [
+    { t: "Un documentaire engagé", p: { emile: 1 } },
+    { t: "Un film d’action", p: { capo: 1 } },
+    { t: "La série dont tout le monde parle", p: { oli: 1 } },
+    { t: "Ce que les autres veulent", p: { yohan: 1 } },
+  ] },
+  { t: "Débat politique au souper de famille. Tu…", r: [
+    { t: "Défends les minorités", p: { emile: 1 } },
+    { t: "Provoques exprès", p: { capo: 1 } },
+    { t: "Dis que les deux côtés ont un point", p: { oli: 1 } },
+    { t: "Changes de sujet et ressers du vin", p: { yohan: 1 } },
+  ] },
+  { t: "Ton coloc ne fait jamais la vaisselle. Tu…", r: [
+    { t: "Fais un tableau des tâches", p: { oli: 1 } },
+    { t: "La fais toi-même, c’est pas grave", p: { yohan: 1 } },
+    { t: "Mets sa vaisselle sale dans son lit", p: { capo: 1 } },
+    { t: "Organises une réunion de coloc pour parler de vos ressentis", p: { emile: 1 } },
+  ] },
+  { t: "L’immigration, pour toi…", r: [
+    { t: "Plus on est de fous, plus on rit", p: { emile: 1 } },
+    { t: "Faut fermer les frontières", p: { capo: 1 } },
+    { t: "Oui, mais encadrée", p: { oli: 1 } },
+  ] },
+  { t: "Tu gagnes 1 000 $ au casino. Tu…", r: [
+    { t: "Rejoues tout", p: { capo: 1 } },
+    { t: "Payes une tournée générale", p: { yohan: 1 } },
+    { t: "En donnes une partie à une asso", p: { emile: 1 } },
+    { t: "Les mets de côté", p: { oli: 1 } },
+  ] },
+  { t: "Ton moyen de transport idéal…", r: [
+    { t: "Le vélo", p: { emile: 1 } },
+    { t: "Un gros pick-up", p: { capo: 1 } },
+    { t: "Une hybride", p: { oli: 1 } },
+    { t: "Tes potes te ramènent", p: { yohan: 1 } },
+  ] },
+  { t: "Il y a une manif dans ta ville. Tu…", r: [
+    { t: "Y vas avec une pancarte", p: { emile: 1 } },
+    { t: "Klaxonnes en passant à côté", p: { capo: 1 } },
+    { t: "Lis les arguments des deux côtés", p: { oli: 1 } },
+    { t: "Vas au bar d’à côté", p: { yohan: 1 } },
+  ] },
+  { t: "Un pote veut lancer sa crypto. Tu…", r: [
+    { t: "Investis gros", p: { capo: 1 } },
+    { t: "Mets 50 $ par amitié", p: { yohan: 1 } },
+    { t: "Lui parles de l’impact environnemental", p: { emile: 1 } },
+    { t: "Demandes à voir le business plan", p: { oli: 1 } },
+  ] },
+  { t: "Dans un travail d’équipe, t’es…", r: [
+    { t: "Le chef qui tranche", p: { capo: 1 } },
+    { t: "Le médiateur", p: { oli: 1 } },
+    { t: "L’ambianceur", p: { yohan: 1 } },
+    { t: "Celui qui s’assure que tout le monde a la parole", p: { emile: 1 } },
+  ] },
+  { t: "Salaire minimum à 25 $ de l’heure ?", r: [
+    { t: "Oui, enfin", p: { emile: 1 } },
+    { t: "Non, ça tue les PME", p: { capo: 1 } },
+    { t: "Oui, mais progressivement", p: { oli: 1 } },
+  ] },
+  { t: "Il est 3 h du matin, quelqu’un propose un dernier verre. Tu…", r: [
+    { t: "En prends un autre, et encore un", p: { yohan: 1 } },
+    { t: "Rentres, t’as des trucs demain", p: { oli: 1 } },
+  ] },
+  { t: "Tu trouves un portefeuille avec 200 $ dedans. Tu…", r: [
+    { t: "Le rapportes avec tout dedans", p: { emile: 1 } },
+    { t: "Gardes l’argent", p: { capo: 1 } },
+    { t: "Le rapportes, mais gardes 20 $ de récompense", p: { oli: 1 } },
+    { t: "Payes une tournée avec", p: { yohan: 1 } },
+  ] },
+  { t: "Quelqu’un envoie une photo de paff dans le group chat. Tu…", r: [
+    { t: "Réponds avec la tienne, en plus gros", p: { capo: 1 } },
+    { t: "Rappelles que c’est pas cool sans consentement", p: { emile: 1 } },
+    { t: "Mets un 😂 et passes à autre chose", p: { oli: 1 } },
+    { t: "La mets en photo du groupe", p: { yohan: 1 } },
+  ] },
+  { t: "On te propose un shot de Fireball. Tu…", r: [
+    { t: "En prends deux", p: { yohan: 1 } },
+    { t: "Prends-le pour pas être plate", p: { oli: 1 } },
+    { t: "Dis non, ton corps ton choix", p: { emile: 1 } },
+    { t: "Défies tout le monde de le caller", p: { capo: 1 } },
+  ] },
+  { t: "Ton opinion sur les pronoms dans la bio ?", r: [
+    { t: "Les miens y sont déjà", p: { emile: 1 } },
+    { t: "Je mets « hélicoptère d’attaque »", p: { capo: 1 } },
+    { t: "Chacun fait ce qu’il veut", p: { oli: 1 } },
+    { t: "C’est quoi une bio ?", p: { yohan: 1 } },
+  ] },
+  { t: "Tu pètes dans l’ascenseur, il y a juste toi et un inconnu. Tu…", r: [
+    { t: "Le regardes droit dans les yeux, fier", p: { capo: 1 } },
+    { t: "T’excuses, c’est naturel", p: { emile: 1 } },
+    { t: "Fais semblant de rien", p: { oli: 1 } },
+    { t: "Lui demandes s’il veut le deuxième", p: { yohan: 1 } },
+  ] },
+  { t: "Ton pote s’endort en premier à la soirée. Tu…", r: [
+    { t: "Lui dessines un paff sur le front", p: { capo: 1 } },
+    { t: "Le mets en position latérale de sécurité", p: { emile: 1 } },
+    { t: "Le laisses dormir, c’est la règle", p: { oli: 1 } },
+    { t: "Le réveilles, la soirée est pas finie", p: { yohan: 1 } },
+  ] },
+  { t: "Ta mère tombe sur ton historique de recherche. Tu…", r: [
+    { t: "Assumes complètement", p: { capo: 1 } },
+    { t: "Lui expliques que c’est de l’éducation sexuelle", p: { emile: 1 } },
+    { t: "Dis que c’était un virus", p: { oli: 1 } },
+    { t: "Dis que c’était Yohan", p: { yohan: 1 } },
+  ] },
+  { t: "T’envoies une photo pas censée être envoyée… au group chat de la famille. Tu…", r: [
+    { t: "Laisses ça là, ils devraient être fiers", p: { capo: 1 } },
+    { t: "Fais un long message sur la positivité corporelle", p: { emile: 1 } },
+    { t: "Supprimes pour tout le monde en 0,2 seconde", p: { oli: 1 } },
+    { t: "Ajoutes « party ce soir chez nous ? »", p: { yohan: 1 } },
+  ] },
+  { t: "Aux urinoirs, le gars d’à côté jette un coup d’œil. Tu…", r: [
+    { t: "Te tournes un peu pour qu’il voie mieux", p: { capo: 1 } },
+    { t: "Respectes sa curiosité", p: { emile: 1 } },
+    { t: "Fixes le mur très fort", p: { oli: 1 } },
+    { t: "Lui demandes s’il veut une bière après", p: { yohan: 1 } },
+  ] },
+  { t: "T’as la gastro le jour du party. Tu…", r: [
+    { t: "Y vas quand même, t’es pas une victime", p: { capo: 1 } },
+    { t: "Restes chez vous pour pas contaminer personne", p: { emile: 1 } },
+    { t: "Y vas, mais restes proche de la toilette", p: { oli: 1 } },
+    { t: "Y vas et prends des shots pour désinfecter", p: { yohan: 1 } },
+  ] },
+  { t: "Tu dois choisir : plus de paff ou plus de cerveau ?", r: [
+    { t: "Plus de paff, évidemment", p: { capo: 1 } },
+    { t: "Plus de cerveau, la taille c’est une construction sociale", p: { emile: 1 } },
+    { t: "Un peu des deux", p: { oli: 1 } },
+    { t: "Ça change quoi, je suis saoul anyway", p: { yohan: 1 } },
+  ] },
+  { t: "Quelqu’un fait un nude de groupe au chalet. Tu…", r: [
+    { t: "T’es au centre de la photo", p: { capo: 1 } },
+    { t: "Participes seulement si tout le monde est à l’aise", p: { emile: 1 } },
+    { t: "Prends la photo", p: { oli: 1 } },
+    { t: "C’était ton idée", p: { yohan: 1 } },
+  ] },
+];
+const LETTERS = ["A", "B", "C", "D", "E", "F"];
+const CENTER_R = 20;
+
+/* ---------- helpers ---------- */
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const clamp = (v) => Math.max(-100, Math.min(100, Math.round(Number(v) || 0)));
+const norm = (s) => String(s || "").trim().toLowerCase();
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const poleVar = (key) => `var(--${key})`;
+const de = (n) => (/^[aeiouyéèh]/i.test(n) ? "d’" : "de ") + n;
+function colorFor(p) {
+  const pole = POLES.find((o) => norm(o.name) === norm(p.name));
+  if (pole) return poleVar(pole.key);
+  let h = 7; for (const c of String(p.id)) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return `hsl(${h % 360}, 62%, 50%)`;
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const affinity = (a, b) => Math.round(100 - dist(a, b) / (Math.SQRT2 * 200) * 100);
+// ressemblance à un pôle : 100 % dessus, 0 % au coin le plus éloigné
+const POLE_MAX = Math.hypot(200, 100);
+function resemblance(p) {
+  return POLES.map((o) => ({ ...o, pct: Math.max(0, Math.round(100 - dist(p, o) / POLE_MAX * 100)) }))
+    .sort((a, b) => b.pct - a.pct);
+}
+function profile(p) {
+  if (Math.hypot(p.x, p.y) < CENTER_R) return ["Pile au milieu", "Tu es au centre de la bande : un peu de chacun, et personne en particulier."];
+  const ax = Math.abs(p.x) >= Math.abs(p.y) ? "x" : "y", o = ax === "x" ? "y" : "x";
+  const name = (a, v) => (a === "x" ? (v > 0 ? "Capo" : "Emile") : (v > 0 ? "Oli" : "Yohan"));
+  const main = name(ax, p[ax]);
+  const sec = Math.abs(p[o]) >= 20 && Math.abs(p[o]) >= 0.5 * Math.abs(p[ax]) ? name(o, p[o]) : null;
+  if (sec) return [`${main} tendance ${sec}`, `Tu ressembles surtout à ${main}, avec une bonne dose ${de(sec)}.`];
+  return [`Un vrai ${main}`, `Tu ressembles surtout à ${main}. Le reste de la bande est plus loin.`];
+}
+function weights(r) {
+  const p = r.p || {};
+  const c = (v) => Math.max(-1, Math.min(1, v));
+  return { x: c((p.capo || 0) - (p.emile || 0)), y: c((p.oli || 0) - (p.yohan || 0)) };
+}
+function score(answers) {
+  const sum = { x: 0, y: 0 }, max = { x: 0, y: 0 };
+  QUESTIONS.forEach((q, i) => {
+    const ws = q.r.map(weights);
+    for (const a of ["x", "y"]) {
+      max[a] += Math.max(0, ...ws.map((w) => Math.abs(w[a])));
+      if (answers[i] != null) sum[a] += ws[answers[i]][a];
+    }
+  });
+  const pct = (a) => (max[a] ? clamp(sum[a] / max[a] * 100) : 0);
+  return { x: pct("x"), y: pct("y") };
+}
+function sanitize(id, d) {
+  if (!d || typeof d !== "object") return null;
+  const name = String(d.name || "").trim().slice(0, 24);
+  if (!name) return null;
+  return { id, name, x: clamp(d.x), y: clamp(d.y), by: typeof d.by === "string" ? d.by : null, at: Number(d.at) || 0 };
+}
+function encodeCode(r) {
+  return "BP-" + btoa(unescape(encodeURIComponent(JSON.stringify({ n: r.name, x: r.x, y: r.y }))));
+}
+function decodeCode(code) {
+  try {
+    const d = JSON.parse(decodeURIComponent(escape(atob(String(code).trim().replace(/^BP-/i, "")))));
+    return sanitize("import", { name: d.n, x: d.x, y: d.y });
+  } catch { return null; }
+}
+
+/* ---------- state ---------- */
+const state = {
+  view: "home", name: "", answers: new Array(QUESTIONS.length).fill(null), qi: 0,
+  selected: null, pendingDelete: null, last: null, saveResult: null,
+};
+let people = [];
+let mode = "loading";          // loading | shared | local
+
+
+/* ---------- storage (Supabase) ---------- */
+const SB_URL = "https://cvvgcqlerjtpvutmajuy.supabase.co";
+const SB_KEY = "sb_publishable_YfTGbISB83xD_NweHjQk6w_-6KfuRtZ";
+const API = SB_URL + "/rest/v1/results";
+const H = { apikey: SB_KEY, "Content-Type": "application/json" };
+async function fetchAll() {
+  const res = await fetch(API + "?select=id,name,x,y,at&order=name", { headers: H });
+  if (!res.ok) throw new Error(res.status);
+  const rows = await res.json();
+  people = rows.map((d) => sanitize(String(d.id), d)).filter(Boolean);
+  mode = "shared"; renderStatus(); syncAll();
+}
+async function writeEntry(r) {
+  try {
+    const res = await fetch(API + "?on_conflict=name_key", {
+      method: "POST",
+      headers: { ...H, Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({ name: r.name, name_key: norm(r.name), x: r.x, y: r.y, at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error(res.status);
+    const [row] = await res.json();
+    await fetchAll();
+    return { ok: true, id: String(row.id) };
+  } catch { return { ok: false, msg: "L’enregistrement a échoué. Vérifie ta connexion et réessaie." }; }
+}
+async function removeEntry(id) {
+  try { await fetch(API + "?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: H }); } catch {}
+  if (state.selected === id) state.selected = null;
+  fetchAll().catch(() => {});
+}
+const canDelete = () => true;
+
+/* ---------- views ---------- */
+function showView(v) {
+  state.view = v;
+  for (const id of ["home", "quiz", "result"]) $("#view-" + id).hidden = id !== v;
+  $(".panel").scrollTop = 0;
+  drawPeople();
+}
+function renderStatus() {
+  const s = $("#status");
+  s.textContent = mode === "shared" ? "Résultats partagés : tous ceux qui ouvrent ce lien voient le même plan."
+    : mode === "error" ? "Impossible de joindre le groupe pour l’instant. Recharge la page."
+    : "Connexion au groupe…";
+}
+function renderImport() {}
+
+function simBars(p, host) {
+  host.replaceChildren(el("p", "sim-title", "Ressemblance"));
+  resemblance(p).forEach((o, i) => {
+    const row = el("div", "sim" + (i === 0 ? " top" : "")); row.style.setProperty("--c", poleVar(o.key));
+    const bar = el("div", "bar"); const fill = el("div"); fill.style.width = o.pct + "%"; bar.append(fill);
+    row.append(el("span", "who-n", o.name), bar, el("span", "pc", o.pct + " %"));
+    host.append(row);
+  });
+}
+function pairsFor(p, host) {
+  host.replaceChildren();
+  const others = people.filter((o) => o.id !== p.id && norm(o.name) !== norm(p.name));
+  if (!others.length) return null;
+  const sorted = others.slice().sort((a, b) => dist(p, a) - dist(p, b));
+  const line = (label, o) => {
+    const d = el("div"); const right = el("span");
+    right.append(el("b", "", o.name), document.createTextNode(" "), el("span", "pct", affinity(p, o) + " % d’affinité"));
+    d.append(el("span", "", label), right); host.append(d);
+  };
+  line("Le plus proche", sorted[0]);
+  if (sorted.length > 1) line("Le plus éloigné", sorted[sorted.length - 1]);
+  return sorted[0];
+}
+
+function renderRoster() {
+  const list = $("#roster"); list.replaceChildren();
+  const sorted = people.slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  $("#roster-empty").hidden = sorted.length > 0;
+  $("#count").textContent = sorted.length ? String(sorted.length) : "";
+  for (const p of sorted) {
+    const li = el("li");
+    const b = el("button", "who"); b.type = "button"; b.style.setProperty("--c", colorFor(p));
+    b.setAttribute("aria-pressed", String(state.selected === p.id));
+    b.append(el("span", "dot"), el("span", "nm", p.name), el("span", "arch", profile(p)[0]));
+    b.addEventListener("click", () => select(state.selected === p.id ? null : p.id));
+    li.append(b);
+    if (canDelete(p)) {
+      const confirm = state.pendingDelete === p.id;
+      const d = el("button", "del" + (confirm ? " confirm" : ""), confirm ? "Supprimer ?" : "✕");
+      d.type = "button"; d.setAttribute("aria-label", confirm ? "Confirmer la suppression de " + p.name : "Retirer " + p.name);
+      d.addEventListener("click", () => {
+        if (state.pendingDelete === p.id) { state.pendingDelete = null; removeEntry(p.id); }
+        else { state.pendingDelete = p.id; renderRoster(); }
+      });
+      li.append(d);
+    }
+    list.append(li);
+  }
+}
+let link = null;
+function renderDetail() {
+  const host = $("#detail"); host.replaceChildren();
+  link = null;
+  const p = people.find((o) => o.id === state.selected);
+  if (p) {
+    const [title, desc] = profile(p);
+    const card = el("div", "card");
+    const head = el("div", "card-head");
+    head.append(el("span", "eyebrow", p.name), el("h3", "", title));
+    const bars = el("div", "bars"); simBars(p, bars);
+    const pairs = el("div", "pairs");
+    card.append(head, el("p", "", desc), bars, pairs);
+    host.append(card);
+    const closest = pairsFor(p, pairs);
+    if (closest) link = [p, closest];
+  }
+  drawLink();
+}
+function select(id) { state.selected = id; state.pendingDelete = null; renderRoster(); renderDetail(); drawPeople(); }
+function syncAll() {
+  if (state.selected && !people.some((p) => p.id === state.selected)) state.selected = null;
+  renderRoster(); renderDetail(); drawPeople();
+  if (state.view === "result") renderPairsResult();
+}
+
+/* ---------- quiz ---------- */
+const likert = $("#likert");
+function renderQuestion() {
+  const q = QUESTIONS[state.qi];
+  $("#q-count").textContent = `${state.qi + 1} / ${QUESTIONS.length}`;
+  $("#q-bar").style.width = (state.answers.filter((a) => a != null).length / QUESTIONS.length * 100) + "%";
+  $("#q-text").textContent = q.t;
+  likert.replaceChildren();
+  q.r.forEach((r, i) => {
+    const b = el("button", "choice"); b.type = "button";
+    b.setAttribute("aria-pressed", String(state.answers[state.qi] === i));
+    b.append(el("span", "letter", LETTERS[i]), el("span", "", r.t));
+    b.addEventListener("click", () => answer(i));
+    likert.append(b);
+  });
+  $("#q-back").disabled = state.qi === 0;
+  drawPeople();
+}
+let advancing = false;
+function answer(v) {
+  if (advancing) return;
+  state.answers[state.qi] = v;
+  renderQuestion();
+  advancing = true;
+  setTimeout(() => {
+    advancing = false;
+    const next = state.answers.findIndex((a, i) => a == null && i > state.qi);
+    const anyLeft = state.answers.findIndex((a) => a == null);
+    if (next !== -1) state.qi = next;
+    else if (anyLeft !== -1) state.qi = anyLeft;
+    else return finish();
+    renderQuestion();
+  }, 170);
+}
+function startQuiz(name) {
+  state.name = name; state.answers.fill(null); state.qi = 0; state.saveResult = null;
+  select(null);
+  showView("quiz"); renderQuestion();
+}
+async function finish() {
+  state.last = { name: state.name, ...score(state.answers) };
+  state.saveResult = { pending: true };
+  showView("result"); renderResult();
+  const res = await writeEntry(state.last);
+  state.saveResult = res;
+  if (res.ok) { state.selected = res.id; lsSet("boussole.lastName", state.name); }
+  renderResult(); syncAll();
+}
+function renderPairsResult() { if (state.last) pairsFor({ id: state.saveResult && state.saveResult.id, ...state.last }, $("#r-pairs")); }
+function renderResult() {
+  const r = state.last; if (!r) return;
+  const [title, desc] = profile(r);
+  $("#r-who").textContent = `${r.name}, ton résultat :`;
+  $("#r-arch").textContent = title;
+  $("#r-desc").textContent = desc;
+  simBars(r, $("#r-bars"));
+  renderPairsResult();
+  const box = $("#r-save"); box.replaceChildren();
+  const s = state.saveResult;
+  if (!s || s.pending) { box.append(el("p", "status", "Enregistrement…")); return; }
+  if (s.ok) { box.append(el("p", "status", s.local ? "Ajouté au plan sur cet appareil." : "Ajouté au plan du groupe. Tes amis te voient déjà.")); return; }
+  box.append(el("p", "err", s.msg || "L’enregistrement a échoué."));
+  const retry = el("button", "btn ghost", "Réessayer"); retry.type = "button";
+  retry.addEventListener("click", async () => { state.saveResult = { pending: true }; renderResult(); const res = await writeEntry(state.last); state.saveResult = res; if (res.ok) state.selected = res.id; renderResult(); syncAll(); });
+  box.append(retry);
+}
+
+/* ---------- events ---------- */
+$("#start-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("#name").value.trim().slice(0, 24);
+  const err = $("#name-err");
+  if (!name) { err.textContent = "Écris un prénom pour qu’on te retrouve sur le plan."; err.hidden = false; $("#name").focus(); return; }
+  if (!QUESTIONS.length) { err.textContent = "Les questions arrivent bientôt. Reviens dans un moment."; err.hidden = false; return; }
+  err.hidden = true;
+  startQuiz(name);
+});
+$("#q-back").addEventListener("click", () => { if (state.qi > 0) { state.qi--; renderQuestion(); } });
+$("#q-quit").addEventListener("click", () => { showView("home"); syncAll(); });
+$("#r-home").addEventListener("click", () => { showView("home"); syncAll(); });
+$("#r-again").addEventListener("click", () => startQuiz(state.name));
+document.addEventListener("keydown", (e) => {
+  if (state.view !== "quiz" || e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toUpperCase();
+  const n = /^[1-6]$/.test(k) ? Number(k) - 1 : LETTERS.indexOf(k);
+  if (n >= 0 && n < QUESTIONS[state.qi].r.length) { e.preventDefault(); answer(n); }
+  else if (e.key === "Backspace" || e.key === "ArrowLeft") { e.preventDefault(); $("#q-back").click(); }
+});
+
+/* ---------- 2D plane ---------- */
+const stage = $("#stage"), svg = $("#plane"), labels = $("#labels");
+const NS = "http://www.w3.org/2000/svg";
+const G = { w: 0, h: 0, cx: 0, cy: 0, half: 0 };
+const toPx = (p) => [G.cx + p.x / 100 * G.half, G.cy - p.y / 100 * G.half];
+const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+let linkLine = null;
+
+function layout() {
+  G.w = stage.clientWidth; G.h = stage.clientHeight;
+  const pad = 24;
+  G.half = Math.max(40, (Math.min(G.w, G.h) - 2 * pad) / 2);
+  G.cx = G.w / 2; G.cy = G.h / 2;
+  drawGrid(); drawPeople();
+}
+function drawGrid() {
+  svg.setAttribute("viewBox", `0 0 ${G.w} ${G.h}`);
+  svg.replaceChildren();
+  const { cx, cy, half } = G;
+  const x0 = cx - half, x1 = cx + half, y0 = cy - half, y1 = cy + half;
+  svg.append(svgEl("rect", { x: x0, y: y0, width: half * 2, height: half * 2, rx: 10, fill: "none", style: "stroke:var(--grid)", "stroke-width": 1.5 }));
+  for (let i = 1; i < 8; i++) {
+    if (i === 4) continue;
+    const t = x0 + (i / 8) * half * 2, u = y0 + (i / 8) * half * 2;
+    svg.append(svgEl("line", { x1: t, y1: y0, x2: t, y2: y1, style: "stroke:var(--grid)", "stroke-width": 1 }));
+    svg.append(svgEl("line", { x1: x0, y1: u, x2: x1, y2: u, style: "stroke:var(--grid)", "stroke-width": 1 }));
+  }
+  // axes: each half takes its pole's colour
+  const ax = (a, b, c, d, key) => svg.append(svgEl("line", { x1: a, y1: b, x2: c, y2: d, style: `stroke:var(--${key})`, "stroke-width": 2.5, "stroke-linecap": "round", opacity: 0.55 }));
+  ax(cx, cy, x0, cy, "emile"); ax(cx, cy, x1, cy, "capo"); ax(cx, cy, cx, y1, "yohan"); ax(cx, cy, cx, y0, "oli");
+  linkLine = svgEl("line", { style: "stroke:var(--ink)", "stroke-width": 1.5, "stroke-dasharray": "5 4", opacity: 0.6 });
+  svg.append(linkLine);
+  drawLink();
+}
+function drawLink() {
+  if (!linkLine) return;
+  if (!link || state.view === "quiz") { linkLine.setAttribute("visibility", "hidden"); return; }
+  const [a, b] = link.map(toPx);
+  linkLine.setAttribute("x1", a[0]); linkLine.setAttribute("y1", a[1]);
+  linkLine.setAttribute("x2", b[0]); linkLine.setAttribute("y2", b[1]);
+  linkLine.setAttribute("visibility", "visible");
+}
+
+const poleEls = POLES.map((o) => {
+  const e = el("div", "pole", o.name);
+  e.style.setProperty("--c", poleVar(o.key)); labels.append(e); return { o, e };
+});
+const pointEls = new Map();
+let previewEl = null;
+function placePoles() {
+  const inset = 10;
+  for (const { o, e } of poleEls) {
+    const w = e.offsetWidth, h = e.offsetHeight;
+    let x, y;
+    if (o.key === "emile") { x = G.cx - G.half + inset; y = G.cy - h - 6; }
+    else if (o.key === "capo") { x = G.cx + G.half - inset - w; y = G.cy - h - 6; }
+    else if (o.key === "oli") { x = G.cx + 8; y = G.cy - G.half + inset; }
+    else { x = G.cx + 8; y = G.cy + G.half - inset - h; }
+    e.style.transform = `translate(${x}px, ${y}px)`;
+  }
+}
+function makePoint(cls, color, text, onClick) {
+  const wrap = el("div", "pt " + cls); wrap.style.setProperty("--c", color);
+  const ball = el("div", "ball");
+  const tag = el(onClick ? "button" : "div", "tag", text);
+  if (onClick) { tag.type = "button"; tag.addEventListener("click", onClick); ball.style.cursor = "pointer"; ball.style.pointerEvents = "auto"; ball.addEventListener("click", onClick); }
+  wrap.append(ball, tag); labels.append(wrap);
+  return wrap;
+}
+function drawPeople() {
+  if (!G.w) return;
+  placePoles();
+  const seen = new Set();
+  for (const p of people) {
+    seen.add(p.id);
+    let e = pointEls.get(p.id);
+    if (!e) {
+      e = makePoint("", colorFor(p), p.name, () => { if (state.view !== "home") showView("home"); select(state.selected === p.id ? null : p.id); });
+      pointEls.set(p.id, e);
+    }
+    e.querySelector(".tag").textContent = p.name;
+    e.style.setProperty("--c", colorFor(p));
+    const [x, y] = toPx(p);
+    e.style.transform = `translate(${x}px, ${y}px)`;
+    e.classList.toggle("sel", p.id === state.selected);
+    e.style.zIndex = p.id === state.selected ? 3 : 1;
+  }
+  for (const [id, e] of pointEls) if (!seen.has(id)) { e.remove(); pointEls.delete(id); }
+
+  const showPreview = state.view === "quiz" ||
+    (state.view === "result" && state.saveResult && !state.saveResult.ok && !state.saveResult.pending);
+  if (showPreview) {
+    if (!previewEl) { previewEl = makePoint("me", "var(--ink)", "toi", null); previewEl.style.transform = `translate(${G.cx}px, ${G.cy}px)`; previewEl.style.zIndex = 4; }
+    previewEl.querySelector(".tag").textContent = state.name || "toi";
+    const target = state.view === "result" && state.last ? state.last : score(state.answers);
+    const [x, y] = toPx(target);
+    requestAnimationFrame(() => { if (previewEl) previewEl.style.transform = `translate(${x}px, ${y}px)`; });
+  } else if (previewEl) { previewEl.remove(); previewEl = null; }
+  drawLink();
+}
+new ResizeObserver(layout).observe(stage);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(placePoles);
+
+/* ---------- boot ---------- */
+const lastName = lsGet("boussole.lastName"); if (lastName) $("#name").value = lastName;
+renderStatus(); renderRoster(); layout();
+const refresh = () => fetchAll().catch(() => { if (mode !== "shared") { mode = "error"; renderStatus(); } });
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 5000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+})();
+</script>
+
+</body>
+</html>
